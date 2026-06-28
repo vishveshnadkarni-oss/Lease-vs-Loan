@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Lease vs Loan PTPM Calculator | BFL</title>
+<style>
+  :root{
+    --bg:#0d0d0d;
+    --panel:#161616;
+    --panel2:#1d1d1d;
+    --yellow:#FFC72C;
+    --yellow-dim:#7a6118;
+    --text:#f3f3f3;
+    --muted:#9a9a9a;
+    --green:#3ecf72;
+    --red:#ff6b6b;
+    --border:#2a2a2a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding-bottom:40px;
+  }
+  header{
+    background:linear-gradient(135deg,#000 0%,#161616 100%);
+    padding:18px 16px 14px;
+    border-bottom:3px solid var(--yellow);
+    position:sticky; top:0; z-index:10;
+  }
+  header h1{
+    margin:0; font-size:18px; color:var(--yellow); letter-spacing:0.3px;
+  }
+  header p{margin:2px 0 0; font-size:12px; color:var(--muted);}
+  .wrap{max-width:680px; margin:0 auto; padding:14px;}
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:16px; margin-bottom:14px;
+  }
+  .card h2{
+    margin:0 0 12px; font-size:14px; color:var(--yellow); text-transform:uppercase;
+    letter-spacing:0.8px; border-left:3px solid var(--yellow); padding-left:8px;
+  }
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .field{display:flex; flex-direction:column; gap:4px;}
+  .field.full{grid-column:1 / -1;}
+  label{font-size:11.5px; color:var(--muted); font-weight:600;}
+  input, select{
+    background:#0f0f0f; border:1px solid var(--border); color:var(--text);
+    padding:10px; border-radius:8px; font-size:15px; width:100%;
+  }
+  input:focus, select:focus{outline:none; border-color:var(--yellow);}
+  .pct{position:relative;}
+  .pct::after{
+    content:"%"; position:absolute; right:10px; top:9px; color:var(--muted); font-size:13px;
+  }
+  details summary{
+    cursor:pointer; color:var(--yellow); font-size:12.5px; font-weight:600; padding:4px 0;
+    list-style:none;
+  }
+  details summary::-webkit-details-marker{display:none;}
+  details summary::before{content:"▸ "; }
+  details[open] summary::before{content:"▾ "; }
+  details .grid{margin-top:10px;}
+
+  select#caseSelect{
+    font-size:15px; font-weight:700; color:var(--yellow); border:1px solid var(--yellow-dim);
+  }
+  .ptpm-badge{
+    display:flex; justify-content:space-between; align-items:center;
+    background:#0f0f0f; border:1px solid var(--border); border-radius:8px;
+    padding:10px 12px; margin-top:10px;
+  }
+  .ptpm-badge .val{font-size:20px; font-weight:800; color:var(--yellow);}
+  .ptpm-badge .lbl{font-size:11px; color:var(--muted);}
+
+  button.primary{
+    width:100%; background:var(--yellow); color:#111; border:none; border-radius:10px;
+    padding:13px; font-size:15px; font-weight:800; margin-top:4px; cursor:pointer;
+  }
+  button.primary:active{transform:scale(0.99);}
+
+  table{width:100%; border-collapse:collapse; font-size:13px; margin-top:4px;}
+  th, td{padding:6px 6px; text-align:right; border-bottom:1px solid var(--border);}
+  th:first-child, td:first-child{text-align:left; color:var(--muted);}
+  thead th{color:var(--yellow); font-size:11.5px; text-transform:uppercase; letter-spacing:0.4px;}
+  tr.total td{font-weight:800; border-top:1px solid var(--yellow-dim); color:#fff;}
+  tr.subrow td{color:var(--muted); font-size:12px;}
+  tr.subrow td:first-child{font-style:italic;}
+  .remark{display:block; font-size:9.5px; color:var(--yellow-dim); font-style:normal; font-weight:400; margin-top:1px;}
+  tr.save td{color:var(--green); font-weight:800;}
+  .scrollx{overflow-x:auto;}
+  .note{font-size:11px; color:var(--muted); margin-top:6px;}
+
+  .copybar{
+    display:flex; gap:8px; margin-top:10px;
+  }
+  .copybar button{
+    flex:1; background:var(--panel2); border:1px solid var(--yellow-dim); color:var(--yellow);
+    padding:11px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;
+  }
+  .copybar button.copied{background:var(--green); color:#0d0d0d; border-color:var(--green);}
+
+  #resultsArea{display:none;}
+  .schedTable{max-height:260px; overflow-y:auto; display:block;}
+  .schedTable table{display:table; width:100%;}
+  footer{text-align:center; color:var(--muted); font-size:11px; padding:18px 14px 0;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ Lease vs Loan — PTPM Calculator</h1>
+  <p>Bajaj Finance · OEM Equipment Financing</p>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <h2>Inputs</h2>
+    <div class="grid">
+      <div class="field full">
+        <label>Machine Value (₹, basic, excl. GST)</label>
+        <input type="number" id="machineValue" value="1000000" min="0">
+      </div>
+      <div class="field">
+        <label>Tenor (Months)</label>
+        <input type="number" id="tenor" value="60" min="1">
+      </div>
+      <div class="field">
+        <label>Loan ROI (% p.a.)</label>
+        <input type="number" id="loanRoi" value="9.5" step="0.05">
+      </div>
+      <div class="field pct">
+        <label>Processing Fee — PF</label>
+        <input type="number" id="pf" value="0.5" step="0.05">
+      </div>
+      <div class="field">
+        <label>Residual Value — RV (₹, excl. GST)</label>
+        <input type="number" id="rv" value="1000" min="0">
+      </div>
+      <div class="field pct">
+        <label>GST</label>
+        <input type="number" id="gst" value="18" step="0.5">
+      </div>
+      <div class="field pct">
+        <label>Advance Rental</label>
+        <input type="number" id="advRental" value="20" step="1">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>PTPM Case</h2>
+    <select id="caseSelect"></select>
+    <div class="ptpm-badge">
+      <div>
+        <div class="lbl">PTPM (per ₹1000)</div>
+        <div class="val" id="ptpmVal">—</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="lbl">Lease ROI used</div>
+        <div class="val" id="leaseRoiVal" style="font-size:16px;">—</div>
+      </div>
+    </div>
+    <button class="primary" id="calcBtn">Generate Comparison Table →</button>
+  </div>
+
+  <div id="resultsArea">
+
+    <div class="card">
+      <h2>Loan vs Lease — Cost Comparison</h2>
+      <div class="scrollx">
+        <table id="compTable"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Day-0 Customer Contribution (Lease)</h2>
+      <div class="scrollx">
+        <table id="day0Table"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>End of Lease — Residual Value Buyout</h2>
+      <div class="scrollx">
+        <table id="rvTable"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <h2 style="margin:0;">Month-wise Lease Rental Schedule</h2>
+        <button id="copyScheduleBtn" style="background:var(--panel2); border:1px solid var(--yellow-dim); color:var(--yellow); padding:7px 10px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;">📋 Copy</button>
+      </div>
+      <div class="scrollx schedTable" style="margin-top:10px;">
+        <table id="schedTableEl"></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Share</h2>
+      <div class="copybar">
+        <button id="copyWhatsappBtn">📲 Copy for WhatsApp</button>
+        <button id="copyEmailBtn">📧 Copy for Email</button>
+      </div>
+      <div class="note">WhatsApp copy is plain-text; Email copy pastes as a formatted table. Schedule is copied separately above.</div>
+    </div>
+
+  </div>
+
+</div>
+
+<footer>Internal tool · Bajaj Finance · For deal structuring use only</footer>
+
+<script>
+// ---------- Case ladder (annual lease ROI %) ----------
+const CASES = [
+  {label:"Best Case",    roi:13.00},
+  {label:"Best Case-1",  roi:12.75},
+  {label:"Best Case-2",  roi:12.50},
+  {label:"Best Case-3",  roi:12.25},
+  {label:"Base Case",    roi:12.00},
+  {label:"Base Case-1",  roi:11.75},
+  {label:"Base Case-2",  roi:11.50},
+  {label:"Base Case-3",  roi:11.25},
+  {label:"Worst Case",   roi:11.00},
+  {label:"Worst Case-1", roi:10.75},
+  {label:"Worst Case-2", roi:10.50},
+];
+
+const sel = document.getElementById('caseSelect');
+CASES.forEach((c,i)=>{
+  const o=document.createElement('option');
+  o.value=i; o.textContent=`${c.label} (${c.roi.toFixed(2)}%)`;
+  if(c.label==="Base Case") o.selected=true;
+  sel.appendChild(o);
+});
+
+// ---------- Helpers ----------
+function PMT(rate, nper, pv, fv=0){
+  if(rate===0) return -(pv+fv)/nper;
+  const pow = Math.pow(1+rate, nper);
+  return -(rate*(pv*pow+fv))/(pow-1);
+}
+function inr(n){
+  if(n===undefined||n===null||isNaN(n)) return "-";
+  return "₹" + Math.round(n).toLocaleString('en-IN');
+}
+function inrPlain(n){
+  if(n===undefined||n===null||isNaN(n)) return "-";
+  return Math.round(n).toLocaleString('en-IN');
+}
+function pct(n){ return (n*100).toFixed(2)+"%"; }
+function num(id){ return parseFloat(document.getElementById(id).value)||0; }
+
+// ---------- Core calc ----------
+function computePTPM(roiPct, MV, T, advRentalPct, rvAmt){
+  const rate = (roiPct/100)/12;
+  const adv = (advRentalPct/100)*MV;
+  const leaseFacility = MV; // no custom duty
+  const pmtVal = PMT(rate, T, -(leaseFacility - adv), rvAmt);
+  return (pmtVal/leaseFacility)*1000;
+}
+
+function fullModel(){
+  const MV = num('machineValue');
+  const T  = num('tenor');
+  const loanRoiPct = num('loanRoi');
+  const pfPct = num('pf');
+  const rvAmtInput = num('rv'); // ₹, excl GST
+  const gstPct = num('gst');
+  const advPct = num('advRental');
+  const caseIdx = parseInt(sel.value);
+  const leaseRoiPct = CASES[caseIdx].roi;
+
+  const GST = gstPct/100;
+  const PFr = pfPct/100;
+  const ADVr = advPct/100;
+
+  const PTPM = computePTPM(leaseRoiPct, MV, T, advPct, rvAmtInput);
+
+  // Sheet1 equivalent
+  const basic = MV;
+  const gstAmt = basic*GST;
+  const totalAssetCost = basic + gstAmt; // C6 = D6
+
+  const custContribLoan  = totalAssetCost*ADVr;          // C8
+  const custContribLease = ADVr*basic*(1+GST);           // D8 (== C8 numerically)
+
+  // Loan EMI
+  const loanRate = (loanRoiPct/100)/12;
+  const loanPrincipal = totalAssetCost - custContribLoan;
+  const emi = PMT(loanRate, T, -loanPrincipal); // C13
+
+  // Lease rental
+  const rentalExclGst = basic*PTPM/1000; // D13
+  const rentalGst = rentalExclGst*GST;   // D14
+  const rentalTotal = rentalExclGst+rentalGst; // D15
+
+  const totalPreTaxLoan  = emi*T + custContribLoan;   // C16
+  const totalPreTaxLease = rentalTotal*T + custContribLease; // D16
+
+  // Depreciation (WDV 15% p.a.) over ceil(T/12) years
+  const years = Math.ceil(T/12);
+  let wdv = basic, depTotal = 0, depRows=[];
+  for(let y=1;y<=years;y++){
+    const d = wdv*0.15;
+    depRows.push({year:y, opening:wdv, dep:d});
+    depTotal += d;
+    wdv -= d;
+  }
+
+  // Loan interest schedule
+  let P = loanPrincipal, interestTotal = 0;
+  for(let m=1;m<=T;m++){
+    const interest = P*loanRate;
+    const principal = emi-interest;
+    interestTotal += interest;
+    P -= principal;
+  }
+
+  const taxShieldLoan  = (depTotal + interestTotal)*0.25; // C17
+  const taxShieldLease = (rentalExclGst*T + (custContribLease/(1+GST)))*0.25; // D17
+
+  const gstRefundLoan  = gstAmt; // C18
+  const gstRefundLease = rentalGst*T + (custContribLease - custContribLease/(1+GST)); // D18
+
+  const grossCostLoan  = totalPreTaxLoan - taxShieldLoan - gstRefundLoan;   // C20
+  const grossCostLease = totalPreTaxLease - taxShieldLease - gstRefundLease; // D20
+
+  const rvAmt = rvAmtInput;       // D21 (₹, excl GST)
+  const rvGst = rvAmt*GST;       // D22
+  const rvTotal = rvAmt+rvGst;   // D23
+
+  const totalEffLoan  = grossCostLoan;            // C25
+  const totalEffLease = grossCostLease + rvAmt;   // D25
+
+  const savingsRs = totalEffLoan - totalEffLease;
+  const savingsPct = totalEffLoan!==0 ? savingsRs/totalEffLoan : 0;
+
+  // Day-0 contribution table (lease)
+  const pfBasic = basic*PFr, pfGst = pfBasic*GST, pfTotal = pfBasic+pfGst;
+  const advBasic = ADVr*basic, advGst = advBasic*GST, advTotal = advBasic+advGst;
+  const day0TotalBasic = pfBasic+advBasic;
+  const day0TotalGst = pfGst+advGst;
+  const day0Total = pfTotal+advTotal;
+
+  // Monthly schedule (flat)
+  const schedule = [];
+  for(let m=1;m<=T;m++){
+    schedule.push({m, rental:rentalExclGst, gst:rentalGst, total:rentalTotal});
+  }
+
+  return {
+    MV,T,loanRoiPct,leaseRoiPct,PTPM,gstPct,advPct,pfPct,
+    basic,gstAmt,totalAssetCost,custContribLoan,custContribLease,
+    emi,rentalExclGst,rentalGst,rentalTotal,
+    totalPreTaxLoan,totalPreTaxLease,
+    depTotal,interestTotal,taxShieldLoan,taxShieldLease,
+    gstRefundLoan,gstRefundLease,
+    grossCostLoan,grossCostLease,
+    rvAmt,rvGst,rvTotal,
+    totalEffLoan,totalEffLease,savingsRs,savingsPct,
+    pfBasic,pfGst,pfTotal,advBasic,advGst,advTotal,
+    day0TotalBasic,day0TotalGst,day0Total,
+    schedule
+  };
+}
+
+// ---------- Live PTPM badge ----------
+function refreshPTPM(){
+  const MV = num('machineValue'), T = num('tenor'), advPct=num('advRental'), rvAmt=num('rv');
+  const idx = parseInt(sel.value);
+  const roi = CASES[idx].roi;
+  const ptpm = computePTPM(roi, MV, T, advPct, rvAmt);
+  document.getElementById('ptpmVal').textContent = ptpm.toFixed(2);
+  document.getElementById('leaseRoiVal').textContent = roi.toFixed(2)+"%";
+}
+['machineValue','tenor','advRental','rv'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', refreshPTPM);
+});
+sel.addEventListener('change', refreshPTPM);
+refreshPTPM();
+
+// ---------- Render tables ----------
+let lastModel = null;
+
+function row(label, a, b, cls=""){
+  return `<tr class="${cls}"><td>${label}</td><td>${a}</td><td>${b}</td></tr>`;
+}
+
+function renderComparison(m){
+  let h = `<thead><tr><th>Particulars</th><th>Loan</th><th>Lease</th></tr></thead><tbody>`;
+  h += row("Basic Asset Cost", inr(m.basic), inr(m.basic));
+  h += row("GST", inr(m.gstAmt), inr(m.gstAmt));
+  h += row("Total Asset Cost (incl. GST)", inr(m.totalAssetCost), inr(m.totalAssetCost));
+  h += row("Day-0 Customer Contribution", inr(m.custContribLoan), inr(m.custContribLease));
+  h += row("Tenor (Months)", m.T, m.T);
+  h += row("ROI / PTPM", m.loanRoiPct.toFixed(2)+"%", m.PTPM.toFixed(2));
+  h += row("&nbsp;&nbsp;&nbsp;↳ EMI / Rental (excl. GST)", inr(m.emi), inr(m.rentalExclGst), "subrow");
+  h += row("&nbsp;&nbsp;&nbsp;↳ GST on EMI / Rental <span class='remark'>(GST on rental is input credit for lessee in lease)</span>", inr(0), inr(m.rentalGst), "subrow");
+  h += row("Total EMI / Rental (incl. GST)", inr(m.emi), inr(m.rentalTotal));
+  h += row("Total Pre-Tax Cash Outflow", inr(m.totalPreTaxLoan), inr(m.totalPreTaxLease));
+  h += row("Total Tax Shield (@25%)", inr(m.taxShieldLoan), inr(m.taxShieldLease));
+  h += row("GST Refund / Input Credit", inr(m.gstRefundLoan), inr(m.gstRefundLease));
+  h += row("Gross Cost of Ownership after Tenor", inr(m.grossCostLoan), inr(m.grossCostLease));
+  h += row("End of Term Buyout (excl. GST)", inr(0), inr(m.rvAmt));
+  h += row("Total Effective Post-Tax Cash Outflow (incl. RV)", inr(m.totalEffLoan), inr(m.totalEffLease), "total");
+  h += `<tr class="save"><td>Savings via Lease</td><td colspan="2">${inr(m.savingsRs)} (${(m.savingsPct*100).toFixed(2)}%)</td></tr>`;
+  h += `</tbody>`;
+  document.getElementById('compTable').innerHTML = h;
+}
+
+function renderDay0(m){
+  let h = `<thead><tr><th>Particulars</th><th>Basic</th><th>GST</th><th>Total</th></tr></thead><tbody>`;
+  h += `<tr><td>Processing Fee</td><td>${inr(m.pfBasic)}</td><td>${inr(m.pfGst)}</td><td>${inr(m.pfTotal)}</td></tr>`;
+  h += `<tr><td>Advance Rental</td><td>${inr(m.advBasic)}</td><td>${inr(m.advGst)}</td><td>${inr(m.advTotal)}</td></tr>`;
+  h += `<tr class="total"><td>Total</td><td>${inr(m.day0TotalBasic)}</td><td>${inr(m.day0TotalGst)}</td><td>${inr(m.day0Total)}</td></tr>`;
+  h += `</tbody>`;
+  document.getElementById('day0Table').innerHTML = h;
+}
+
+function renderRV(m){
+  let h = `<thead><tr><th>Particulars</th><th>Basic</th><th>GST</th><th>Total</th></tr></thead><tbody>`;
+  h += `<tr><td>Residual Value Buyout</td><td>${inr(m.rvAmt)}</td><td>${inr(m.rvGst)}</td><td>${inr(m.rvTotal)}</td></tr>`;
+  h += `</tbody>`;
+  document.getElementById('rvTable').innerHTML = h;
+}
+
+function renderSchedule(m){
+  let h = `<thead><tr><th>Month</th><th>Rental</th><th>GST</th><th>Total</th></tr></thead><tbody>`;
+  m.schedule.forEach(r=>{
+    h += `<tr><td>${r.m}</td><td>${inr(r.rental)}</td><td>${inr(r.gst)}</td><td>${inr(r.total)}</td></tr>`;
+  });
+  h += `</tbody>`;
+  document.getElementById('schedTableEl').innerHTML = h;
+}
+
+document.getElementById('calcBtn').addEventListener('click', ()=>{
+  lastModel = fullModel();
+  renderComparison(lastModel);
+  renderDay0(lastModel);
+  renderRV(lastModel);
+  renderSchedule(lastModel);
+  document.getElementById('resultsArea').style.display='block';
+  document.getElementById('resultsArea').scrollIntoView({behavior:'smooth'});
+});
+
+// ---------- Copy for WhatsApp / Email ----------
+function buildWhatsAppText(m){
+  let t = "";
+  t += `*LEASE vs LOAN — COST COMPARISON*\n`;
+  t += `_BFL Equipment Finance_\n\n`;
+  t += `*Parameters*\n`;
+  t += `Machine Value: ${inrPlain(m.MV)}\n`;
+  t += `Tenor: ${m.T} months\n`;
+  t += `GST: ${m.gstPct}%\n`;
+  t += `Advance Rental: ${m.advPct}%\n`;
+  t += `\n--------------------------------\n`;
+
+  t += `\n*LOAN*\n`;
+  t += `ROI: ${m.loanRoiPct.toFixed(2)}% p.a.\n`;
+  t += `Basic Asset Cost: ${inrPlain(m.basic)}\n`;
+  t += `GST: ${inrPlain(m.gstAmt)}\n`;
+  t += `Total Asset Cost: ${inrPlain(m.totalAssetCost)}\n`;
+  t += `Day-0 Contribution: ${inrPlain(m.custContribLoan)}\n`;
+  t += `EMI (excl. GST): ${inrPlain(m.emi)}\n`;
+  t += `Total EMI (incl. GST): ${inrPlain(m.emi)}\n`;
+  t += `Total Pre-Tax Cash Outflow: ${inrPlain(m.totalPreTaxLoan)}\n`;
+  t += `Tax Shield (Dep. + Interest @25%): (${inrPlain(m.taxShieldLoan)})\n`;
+  t += `GST Refund / Input Credit: (${inrPlain(m.gstRefundLoan)})\n`;
+  t += `Gross Cost of Ownership after Tenor: ${inrPlain(m.grossCostLoan)}\n`;
+  t += `\n*Total Effective Post-Tax Cash Outflow: ${inrPlain(m.totalEffLoan)}*\n`;
+
+  t += `\n--------------------------------\n`;
+  t += `\n*LEASE*\n`;
+  t += `Lease ROI: ${m.leaseRoiPct.toFixed(2)}%\n`;
+  t += `PTPM: ${m.PTPM.toFixed(2)} per 1000\n`;
+  t += `Basic Asset Cost: ${inrPlain(m.basic)}\n`;
+  t += `GST: ${inrPlain(m.gstAmt)}\n`;
+  t += `Total Asset Cost: ${inrPlain(m.totalAssetCost)}\n`;
+  t += `Day-0 Contribution: ${inrPlain(m.custContribLease)}\n`;
+  t += `Rental (excl. GST): ${inrPlain(m.rentalExclGst)}\n`;
+  t += `GST on Rental (input credit for lessee): ${inrPlain(m.rentalGst)}\n`;
+  t += `Total Rental (incl. GST): ${inrPlain(m.rentalTotal)}\n`;
+  t += `Total Pre-Tax Cash Outflow: ${inrPlain(m.totalPreTaxLease)}\n`;
+  t += `Tax Shield (Rental + Adv. Rental @25%): (${inrPlain(m.taxShieldLease)})\n`;
+  t += `GST Refund / Input Credit: (${inrPlain(m.gstRefundLease)})\n`;
+  t += `Gross Cost of Ownership after Tenor: ${inrPlain(m.grossCostLease)}\n`;
+  t += `End of Term Buyout (RV, excl. GST): ${inrPlain(m.rvAmt)}\n`;
+  t += `\n*Total Effective Post-Tax Cash Outflow (incl. RV): ${inrPlain(m.totalEffLease)}*\n`;
+
+  t += `\n--------------------------------\n`;
+  t += `\n*DAY-0 CUSTOMER CONTRIBUTION (LEASE)*\n`;
+  t += `Processing Fee: ${inrPlain(m.pfTotal)} (Basic ${inrPlain(m.pfBasic)} + GST ${inrPlain(m.pfGst)})\n`;
+  t += `Advance Rental: ${inrPlain(m.advTotal)} (Basic ${inrPlain(m.advBasic)} + GST ${inrPlain(m.advGst)})\n`;
+  t += `*Total Day-0: ${inrPlain(m.day0Total)}*\n`;
+
+  t += `\n*END OF LEASE — RV BUYOUT*\n`;
+  t += `Residual Value: ${inrPlain(m.rvAmt)} + GST ${inrPlain(m.rvGst)} = *${inrPlain(m.rvTotal)}*\n`;
+
+  t += `\n--------------------------------\n`;
+  t += `*_Savings via Lease: ${inrPlain(m.savingsRs)} (${(m.savingsPct*100).toFixed(2)}%)_*\n`;
+
+  return t;
+}
+
+function buildScheduleText(m){
+  let t = `*MONTH-WISE LEASE RENTAL SCHEDULE*\n`;
+  m.schedule.forEach(r=>{
+    t += `M${r.m}: ${inrPlain(r.rental)} + GST ${inrPlain(r.gst)} = ${inrPlain(r.total)}\n`;
+  });
+  return t;
+}
+
+function buildEmailHTML(m){
+  const caseLabel = CASES[parseInt(sel.value)].label;
+  const trow = (l,a,b)=>`<tr><td style="padding:6px 10px;border:1px solid #ddd;">${l}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${a}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${b}</td></tr>`;
+  let h = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;">`;
+  h += `<h2 style="color:#111;border-bottom:2px solid #FFC72C;padding-bottom:6px;">Lease vs Loan — Cost Comparison</h2>`;
+  h += `<p><b>Machine Value:</b> ${inr(m.MV)} &nbsp; <b>Tenor:</b> ${m.T} months &nbsp; <b>GST:</b> ${m.gstPct}% &nbsp; <b>Advance Rental:</b> ${m.advPct}% &nbsp; <b>Case:</b> ${caseLabel}</p>`;
+
+  h += `<table style="border-collapse:collapse;width:100%;margin-bottom:16px;">`;
+  h += `<tr style="background:#111;color:#FFC72C;"><th style="padding:8px 10px;text-align:left;border:1px solid #ddd;">Particulars</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">Loan</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">Lease</th></tr>`;
+  h += trow("Basic Asset Cost", inr(m.basic), inr(m.basic));
+  h += trow("GST", inr(m.gstAmt), inr(m.gstAmt));
+  h += trow("Total Asset Cost", inr(m.totalAssetCost), inr(m.totalAssetCost));
+  h += trow("Day-0 Customer Contribution", inr(m.custContribLoan), inr(m.custContribLease));
+  h += trow("ROI / PTPM", m.loanRoiPct.toFixed(2)+"%", m.PTPM.toFixed(2));
+  h += trow("&nbsp;&nbsp;↳ EMI / Rental (excl. GST)", inr(m.emi), inr(m.rentalExclGst));
+  h += trow("&nbsp;&nbsp;↳ GST on EMI / Rental (input credit for lessee in lease)", inr(0), inr(m.rentalGst));
+  h += trow("Total EMI / Rental (incl. GST)", inr(m.emi), inr(m.rentalTotal));
+  h += trow("Total Pre-Tax Cash Outflow", inr(m.totalPreTaxLoan), inr(m.totalPreTaxLease));
+  h += trow("Tax Shield (@25%)", "("+inr(m.taxShieldLoan)+")", "("+inr(m.taxShieldLease)+")");
+  h += trow("GST Refund / Input Credit", "("+inr(m.gstRefundLoan)+")", "("+inr(m.gstRefundLease)+")");
+  h += trow("Gross Cost of Ownership after Tenor", inr(m.grossCostLoan), inr(m.grossCostLease));
+  h += trow("End of Term Buyout (excl. GST)", inr(0), inr(m.rvAmt));
+  h += `<tr style="background:#f5f5f5;font-weight:bold;"><td style="padding:8px 10px;border:1px solid #ddd;">Total Effective Post-Tax Cash Outflow (incl. RV)</td><td style="padding:8px 10px;border:1px solid #ddd;text-align:right;">${inr(m.totalEffLoan)}</td><td style="padding:8px 10px;border:1px solid #ddd;text-align:right;">${inr(m.totalEffLease)}</td></tr>`;
+  h += `<tr><td colspan="3" style="padding:8px 10px;border:1px solid #ddd;font-weight:bold;color:#1a7a3d;text-decoration:underline;">Savings via Lease: ${inr(m.savingsRs)} (${(m.savingsPct*100).toFixed(2)}%)</td></tr>`;
+  h += `</table>`;
+
+  h += `<h3 style="color:#111;">Day-0 Customer Contribution (Lease)</h3>`;
+  h += `<table style="border-collapse:collapse;width:100%;margin-bottom:16px;">`;
+  h += `<tr style="background:#111;color:#FFC72C;"><th style="padding:8px 10px;text-align:left;border:1px solid #ddd;">Particulars</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">Basic</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">GST</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">Total</th></tr>`;
+  h += `<tr><td style="padding:6px 10px;border:1px solid #ddd;">Processing Fee</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.pfBasic)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.pfGst)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.pfTotal)}</td></tr>`;
+  h += `<tr><td style="padding:6px 10px;border:1px solid #ddd;">Advance Rental</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.advBasic)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.advGst)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.advTotal)}</td></tr>`;
+  h += `<tr style="background:#f5f5f5;font-weight:bold;"><td style="padding:6px 10px;border:1px solid #ddd;">Total</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.day0TotalBasic)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.day0TotalGst)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.day0Total)}</td></tr>`;
+  h += `</table>`;
+
+  h += `<h3 style="color:#111;">End of Lease — Residual Value Buyout</h3>`;
+  h += `<table style="border-collapse:collapse;width:100%;margin-bottom:16px;">`;
+  h += `<tr style="background:#111;color:#FFC72C;"><th style="padding:8px 10px;text-align:left;border:1px solid #ddd;">Particulars</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">Basic</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">GST</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">Total</th></tr>`;
+  h += `<tr><td style="padding:6px 10px;border:1px solid #ddd;">Residual Value Buyout</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.rvAmt)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.rvGst)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.rvTotal)}</td></tr>`;
+  h += `</table>`;
+  h += `<p style="font-size:11px;color:#888;">Generated by BFL Lease PTPM Calculator</p>`;
+  h += `</div>`;
+  return h;
+}
+
+async function copyPlain(text, btn){
+  try{ await navigator.clipboard.writeText(text); }
+  catch(e){
+    const ta=document.createElement('textarea');
+    ta.value=text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  }
+  flashCopied(btn);
+}
+
+async function copyHTML(html, btn){
+  try{
+    const blobHtml = new Blob([html], {type:'text/html'});
+    const blobText = new Blob([html.replace(/<[^>]+>/g,' ')], {type:'text/plain'});
+    await navigator.clipboard.write([new ClipboardItem({'text/html':blobHtml, 'text/plain':blobText})]);
+  }catch(e){
+    // fallback: select a hidden rendered node and copy
+    const div=document.createElement('div');
+    div.innerHTML=html;
+    div.style.position='fixed'; div.style.left='-9999px';
+    document.body.appendChild(div);
+    const range=document.createRange();
+    range.selectNode(div);
+    const selection=window.getSelection();
+    selection.removeAllRanges(); selection.addRange(range);
+    document.execCommand('copy');
+    selection.removeAllRanges();
+    document.body.removeChild(div);
+  }
+  flashCopied(btn);
+}
+
+function flashCopied(btn){
+  const orig = btn.textContent;
+  btn.textContent = "✅ Copied!";
+  btn.classList.add('copied');
+  setTimeout(()=>{ btn.textContent=orig; btn.classList.remove('copied'); }, 1800);
+}
+
+document.getElementById('copyWhatsappBtn').addEventListener('click', (e)=>{
+  if(!lastModel) return;
+  copyPlain(buildWhatsAppText(lastModel), e.target);
+});
+document.getElementById('copyEmailBtn').addEventListener('click', (e)=>{
+  if(!lastModel) return;
+  copyHTML(buildEmailHTML(lastModel), e.target);
+});
+document.getElementById('copyScheduleBtn').addEventListener('click', (e)=>{
+  if(!lastModel) return;
+  copyPlain(buildScheduleText(lastModel), e.target);
+});
+</script>
+</body>
+</html>
