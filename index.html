@@ -149,6 +149,20 @@
         <input type="number" id="advRental" value="20" step="1">
       </div>
     </div>
+
+    <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px;">
+      <div style="font-size:11.5px; color:var(--yellow); font-weight:700; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;">Day-0 Extras (Lease)</div>
+      <div class="grid">
+      <div class="field">
+          <label>Multi-year Machine Insurance — Value (₹) or Text</label>
+          <input type="text" id="insurance" placeholder="e.g. 25000 or At actuals" style="font-size:13px;">
+        </div>
+        <div class="field">
+          <label>Stamp Duty — Value (₹) or Text</label>
+          <input type="text" id="stampDuty" placeholder="e.g. 5000 or At actuals" style="font-size:13px;">
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="card">
@@ -273,6 +287,16 @@ function fullModel(){
   const rvAmtInput = num('rv'); // ₹, excl GST
   const gstPct = num('gst');
   const advPct = num('advRental');
+  const secDeposit = 0; // removed from Day-0
+  // Insurance and stamp duty: if numeric → use as value; if text → treat as label with ₹0
+  const insRaw = document.getElementById('insurance').value.trim();
+  const sdRaw  = document.getElementById('stampDuty').value.trim();
+  const insIsNum  = insRaw !== '' && !isNaN(Number(insRaw));
+  const sdIsNum   = sdRaw  !== '' && !isNaN(Number(sdRaw));
+  const insurance     = insIsNum ? Number(insRaw) : 0;
+  const insuranceNote = insIsNum ? '' : insRaw;
+  const stampDuty     = sdIsNum  ? Number(sdRaw)  : 0;
+  const stampDutyNote = sdIsNum  ? '' : sdRaw;
   const caseIdx = parseInt(sel.value);
   const leaseRoiPct = CASES[caseIdx].roi;
 
@@ -287,8 +311,9 @@ function fullModel(){
   const gstAmt = basic*GST;
   const totalAssetCost = basic + gstAmt; // C6 = D6
 
-  const custContribLoan  = totalAssetCost*ADVr;          // C8
-  const custContribLease = ADVr*basic*(1+GST);           // D8 (== C8 numerically)
+  const custContribLoan  = totalAssetCost*ADVr;   // loan: % of asset+GST
+  const custContribLease = ADVr*basic;             // lease: % of base asset cost only (excl. GST)
+  const custContribLeaseGst = custContribLease*GST;
 
   // Loan EMI
   const loanRate = (loanRoiPct/100)/12;
@@ -300,8 +325,11 @@ function fullModel(){
   const rentalGst = rentalExclGst*GST;   // D14
   const rentalTotal = rentalExclGst+rentalGst; // D15
 
-  const totalPreTaxLoan  = emi*T + custContribLoan;   // C16
-  const totalPreTaxLease = rentalTotal*T + custContribLease; // D16
+  // Security deposit = 1 month rental excl. GST (auto-calculated)
+  const secDepositAmt = rentalExclGst;
+
+  const totalPreTaxLoan  = emi*T + custContribLoan;
+  const totalPreTaxLease = rentalTotal*T + custContribLease + custContribLeaseGst;
 
   // Depreciation (WDV 15% p.a.) over ceil(T/12) years
   const years = Math.ceil(T/12);
@@ -323,10 +351,10 @@ function fullModel(){
   }
 
   const taxShieldLoan  = (depTotal + interestTotal)*0.25; // C17
-  const taxShieldLease = (rentalExclGst*T + (custContribLease/(1+GST)))*0.25; // D17
+  const taxShieldLease = (rentalExclGst*T + custContribLease)*0.25; // D17 — adv rental excl GST
 
   const gstRefundLoan  = gstAmt; // C18
-  const gstRefundLease = rentalGst*T + (custContribLease - custContribLease/(1+GST)); // D18
+  const gstRefundLease = rentalGst*T + custContribLeaseGst; // D18 — GST on rentals + GST on adv rental
 
   const grossCostLoan  = totalPreTaxLoan - taxShieldLoan - gstRefundLoan;   // C20
   const grossCostLease = totalPreTaxLease - taxShieldLease - gstRefundLease; // D20
@@ -343,10 +371,14 @@ function fullModel(){
 
   // Day-0 contribution table (lease)
   const pfBasic = basic*PFr, pfGst = pfBasic*GST, pfTotal = pfBasic+pfGst;
-  const advBasic = ADVr*basic, advGst = advBasic*GST, advTotal = advBasic+advGst;
-  const day0TotalBasic = pfBasic+advBasic;
-  const day0TotalGst = pfGst+advGst;
-  const day0Total = pfTotal+advTotal;
+  const advBasic = custContribLease, advGst = custContribLeaseGst, advTotal = advBasic+advGst;
+  // Insurance: GST at 18% on the numeric value (input credit available for lessee)
+  const insGst   = insIsNum ? insurance*0.18 : 0;
+  const insTotal  = insIsNum ? insurance + insGst : 0;
+  const sdTotal   = stampDuty; // no GST on stamp duty
+  const day0TotalBasic = pfBasic + advBasic + insurance + stampDuty;
+  const day0TotalGst   = pfGst + advGst + insGst;
+  const day0Total      = pfTotal + advTotal + insTotal + sdTotal;
 
   // Monthly schedule (flat)
   const schedule = [];
@@ -356,7 +388,7 @@ function fullModel(){
 
   return {
     MV,T,loanRoiPct,leaseRoiPct,PTPM,gstPct,advPct,pfPct,
-    basic,gstAmt,totalAssetCost,custContribLoan,custContribLease,
+    basic,gstAmt,totalAssetCost,custContribLoan,custContribLease,custContribLeaseGst,
     emi,rentalExclGst,rentalGst,rentalTotal,
     totalPreTaxLoan,totalPreTaxLease,
     depTotal,interestTotal,taxShieldLoan,taxShieldLease,
@@ -365,6 +397,7 @@ function fullModel(){
     rvAmt,rvGst,rvTotal,
     totalEffLoan,totalEffLease,savingsRs,savingsPct,
     pfBasic,pfGst,pfTotal,advBasic,advGst,advTotal,
+    insIsNum,insGst,insTotal,sdTotal,insuranceNote,stampDutyNote,
     day0TotalBasic,day0TotalGst,day0Total,
     schedule
   };
@@ -407,7 +440,7 @@ function renderComparison(m){
   h += row("Total Tax Shield (@25%)", inr(m.taxShieldLoan), inr(m.taxShieldLease));
   h += row("GST Refund / Input Credit", inr(m.gstRefundLoan), inr(m.gstRefundLease));
   h += row("Gross Cost of Ownership after Tenor", inr(m.grossCostLoan), inr(m.grossCostLease));
-  h += row("End of Term Buyout (excl. GST)", inr(0), inr(m.rvAmt));
+  h += row("End of Term Buyout (incl. GST) <span class='remark'>(GST on RV is input credit for lessee)</span>", inr(0), inr(m.rvTotal));
   h += row("Total Effective Post-Tax Cash Outflow (incl. RV)", inr(m.totalEffLoan), inr(m.totalEffLease), "total");
   h += `<tr class="save"><td>Savings via Lease</td><td colspan="2">${inr(m.savingsRs)} (${(m.savingsPct*100).toFixed(2)}%)</td></tr>`;
   h += `</tbody>`;
@@ -418,6 +451,16 @@ function renderDay0(m){
   let h = `<thead><tr><th>Particulars</th><th>Basic</th><th>GST</th><th>Total</th></tr></thead><tbody>`;
   h += `<tr><td>Processing Fee</td><td>${inr(m.pfBasic)}</td><td>${inr(m.pfGst)}</td><td>${inr(m.pfTotal)}</td></tr>`;
   h += `<tr><td>Advance Rental</td><td>${inr(m.advBasic)}</td><td>${inr(m.advGst)}</td><td>${inr(m.advTotal)}</td></tr>`;
+  if(m.insIsNum && m.insTotal>0){
+    h += `<tr><td>Multi-year Machine Insurance</td><td>${inr(m.insTotal-m.insGst)}</td><td>${inr(m.insGst)}</td><td>${inr(m.insTotal)}</td></tr>`;
+  } else if(m.insuranceNote){
+    h += `<tr><td>Multi-year Machine Insurance</td><td colspan="3" style="color:var(--muted);font-style:italic;">${m.insuranceNote}</td></tr>`;
+  }
+  if(m.sdTotal>0){
+    h += `<tr><td>Stamp Duty</td><td>${inr(m.sdTotal)}</td><td>—</td><td>${inr(m.sdTotal)}</td></tr>`;
+  } else if(m.stampDutyNote){
+    h += `<tr><td>Stamp Duty</td><td colspan="3" style="color:var(--muted);font-style:italic;">${m.stampDutyNote}</td></tr>`;
+  }
   h += `<tr class="total"><td>Total</td><td>${inr(m.day0TotalBasic)}</td><td>${inr(m.day0TotalGst)}</td><td>${inr(m.day0Total)}</td></tr>`;
   h += `</tbody>`;
   document.getElementById('day0Table').innerHTML = h;
@@ -490,13 +533,23 @@ function buildWhatsAppText(m){
   t += `Tax Shield (Rental + Adv. Rental @25%): (${inrPlain(m.taxShieldLease)})\n`;
   t += `GST Refund / Input Credit: (${inrPlain(m.gstRefundLease)})\n`;
   t += `Gross Cost of Ownership after Tenor: ${inrPlain(m.grossCostLease)}\n`;
-  t += `End of Term Buyout (RV, excl. GST): ${inrPlain(m.rvAmt)}\n`;
+  t += `End of Term Buyout (RV, incl. GST): ${inrPlain(m.rvTotal)}\n`;
   t += `\n*Total Effective Post-Tax Cash Outflow (incl. RV): ${inrPlain(m.totalEffLease)}*\n`;
 
   t += `\n--------------------------------\n`;
   t += `\n*DAY-0 CUSTOMER CONTRIBUTION (LEASE)*\n`;
   t += `Processing Fee: ${inrPlain(m.pfTotal)} (Basic ${inrPlain(m.pfBasic)} + GST ${inrPlain(m.pfGst)})\n`;
   t += `Advance Rental: ${inrPlain(m.advTotal)} (Basic ${inrPlain(m.advBasic)} + GST ${inrPlain(m.advGst)})\n`;
+  if(m.insIsNum && m.insTotal>0){
+    t += `Multi-year Machine Insurance: ${inrPlain(m.insTotal-m.insGst)} + GST ${inrPlain(m.insGst)} = ${inrPlain(m.insTotal)}\n`;
+  } else if(m.insuranceNote){
+    t += `Multi-year Machine Insurance: ${m.insuranceNote}\n`;
+  }
+  if(m.sdTotal>0){
+    t += `Stamp Duty: ${inrPlain(m.sdTotal)}\n`;
+  } else if(m.stampDutyNote){
+    t += `Stamp Duty: ${m.stampDutyNote}\n`;
+  }
   t += `*Total Day-0: ${inrPlain(m.day0Total)}*\n`;
 
   t += `\n*END OF LEASE — RV BUYOUT*\n`;
@@ -537,7 +590,7 @@ function buildEmailHTML(m){
   h += trow("Tax Shield (@25%)", "("+inr(m.taxShieldLoan)+")", "("+inr(m.taxShieldLease)+")");
   h += trow("GST Refund / Input Credit", "("+inr(m.gstRefundLoan)+")", "("+inr(m.gstRefundLease)+")");
   h += trow("Gross Cost of Ownership after Tenor", inr(m.grossCostLoan), inr(m.grossCostLease));
-  h += trow("End of Term Buyout (excl. GST)", inr(0), inr(m.rvAmt));
+  h += trow("End of Term Buyout (incl. GST)<br><small style='color:#888;font-weight:400;'>GST on RV is input credit for lessee</small>", inr(0), inr(m.rvTotal));
   h += `<tr style="background:#f5f5f5;font-weight:bold;"><td style="padding:8px 10px;border:1px solid #ddd;">Total Effective Post-Tax Cash Outflow (incl. RV)</td><td style="padding:8px 10px;border:1px solid #ddd;text-align:right;">${inr(m.totalEffLoan)}</td><td style="padding:8px 10px;border:1px solid #ddd;text-align:right;">${inr(m.totalEffLease)}</td></tr>`;
   h += `<tr><td colspan="3" style="padding:8px 10px;border:1px solid #ddd;font-weight:bold;color:#1a7a3d;text-decoration:underline;">Savings via Lease: ${inr(m.savingsRs)} (${(m.savingsPct*100).toFixed(2)}%)</td></tr>`;
   h += `</table>`;
@@ -547,6 +600,16 @@ function buildEmailHTML(m){
   h += `<tr style="background:#111;color:#FFC72C;"><th style="padding:8px 10px;text-align:left;border:1px solid #ddd;">Particulars</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">Basic</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">GST</th><th style="padding:8px 10px;text-align:right;border:1px solid #ddd;">Total</th></tr>`;
   h += `<tr><td style="padding:6px 10px;border:1px solid #ddd;">Processing Fee</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.pfBasic)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.pfGst)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.pfTotal)}</td></tr>`;
   h += `<tr><td style="padding:6px 10px;border:1px solid #ddd;">Advance Rental</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.advBasic)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.advGst)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.advTotal)}</td></tr>`;
+  if(m.insIsNum && m.insTotal>0){
+    h += `<tr><td style="padding:6px 10px;border:1px solid #ddd;">Multi-year Machine Insurance</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.insTotal-m.insGst)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.insGst)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.insTotal)}</td></tr>`;
+  } else if(m.insuranceNote){
+    h += `<tr><td style="padding:6px 10px;border:1px solid #ddd;">Multi-year Machine Insurance</td><td colspan="3" style="padding:6px 10px;border:1px solid #ddd;font-style:italic;color:#888;">${m.insuranceNote}</td></tr>`;
+  }
+  if(m.sdTotal>0){
+    h += `<tr><td style="padding:6px 10px;border:1px solid #ddd;">Stamp Duty</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.sdTotal)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">—</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.sdTotal)}</td></tr>`;
+  } else if(m.stampDutyNote){
+    h += `<tr><td style="padding:6px 10px;border:1px solid #ddd;">Stamp Duty</td><td colspan="3" style="padding:6px 10px;border:1px solid #ddd;text-align:right;" style="font-style:italic;color:#888;">${m.stampDutyNote}</td></tr>`;
+  }
   h += `<tr style="background:#f5f5f5;font-weight:bold;"><td style="padding:6px 10px;border:1px solid #ddd;">Total</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.day0TotalBasic)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.day0TotalGst)}</td><td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${inr(m.day0Total)}</td></tr>`;
   h += `</table>`;
 
