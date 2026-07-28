@@ -184,6 +184,26 @@
   <div id="resultsArea">
 
     <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div>
+          <h2 style="margin:0;">⏱ Time Value Analysis</h2>
+          <div class="note" style="margin-top:3px;">NPV of all cash flows — GST refund at Month 1, tax shield at FY end</div>
+        </div>
+        <button id="tvBtn" style="background:var(--panel2);border:1px solid var(--yellow-dim);color:var(--yellow);padding:10px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">Calculate Time Value</button>
+      </div>
+      <div id="tvResults" style="display:none;margin-top:14px;">
+        <div style="margin-bottom:10px;">
+          <div class="field" style="max-width:200px;">
+            <label>Discount Rate (% p.a.)</label>
+            <input type="number" id="discRate" step="0.25" style="font-size:15px;">
+          </div>
+        </div>
+        <div id="tvOutput"></div>
+        <div class="note" style="margin-top:8px;">* Time value of GST filings (Month 1) and ITR / advance tax filings (FY end) are considered</div>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Loan vs Lease — Cost Comparison</h2>
       <div class="scrollx">
         <table id="compTable"></table>
@@ -674,6 +694,118 @@ document.getElementById('copyScheduleBtn').addEventListener('click', (e)=>{
   if(!lastModel) return;
   copyPlain(buildScheduleText(lastModel), e.target);
 });
+// ---------- Time Value / NPV ----------
+function computeNPV(m, discRate) {
+  const r  = (discRate/100)/12;
+  const T  = m.T;
+  const loanRate = (m.loanRoiPct/100)/12;
+
+  const loanCF  = new Array(T+1).fill(0);
+  const leaseCF = new Array(T+1).fill(0);
+
+  // --- LOAN ---
+  loanCF[0] -= m.custContribLoan;                     // Day-0 outflow
+  if(T>=1) loanCF[1] += m.gstAmt;                    // GST refund Month 1
+
+  // Monthly EMI
+  for(let i=1;i<=T;i++) loanCF[i] -= m.emi;
+
+  // Tax shield at FY end (month 12,24,... or T for partial FY)
+  let P = m.totalAssetCost - m.custContribLoan;
+  let fyInterest=0, fyMonthCount=0, wdv=m.basic;
+  for(let i=1;i<=T;i++){
+    const interest = P*loanRate;
+    fyInterest += interest;
+    P -= (m.emi - interest);
+    fyMonthCount++;
+    if(fyMonthCount===12 || i===T){
+      const dep = wdv*0.15;
+      wdv -= dep;
+      loanCF[i] += (dep + fyInterest)*0.25;
+      fyInterest=0; fyMonthCount=0;
+    }
+  }
+
+  // --- LEASE ---
+  // Day-0 outflow: PF + advance rental (excl+GST) + insurance + stamp duty
+  const day0Lease = m.pfTotal + m.custContribLease + m.custContribLeaseGst + m.insTotal + m.sdTotal;
+  leaseCF[0] -= day0Lease;
+  // Month 1: GST refunds on PF, advance rental, insurance
+  if(T>=1) leaseCF[1] += (m.pfGst + m.custContribLeaseGst + m.insGst);
+
+  // Net monthly rental = excl GST (GST claimed same month)
+  for(let i=1;i<=T;i++) leaseCF[i] -= m.rentalExclGst;
+
+  // Tax shield at FY end
+  let fyRental=0; fyMonthCount=0; let isFirstFY=true;
+  for(let i=1;i<=T;i++){
+    fyRental += m.rentalExclGst;
+    fyMonthCount++;
+    if(fyMonthCount===12 || i===T){
+      let taxBase = fyRental;
+      if(isFirstFY){ taxBase += m.custContribLease; isFirstFY=false; } // adv rental deducted FY1
+      leaseCF[i] += taxBase*0.25;
+      fyRental=0; fyMonthCount=0;
+    }
+  }
+
+  // RV buyout at month T (excl GST — GST is input credit, claimed same month)
+  leaseCF[T] -= m.rvAmt;
+
+  // Discount all CFs
+  let npvL=0, npvLe=0;
+  for(let i=0;i<=T;i++){
+    const d = Math.pow(1+r, i);
+    npvL  += loanCF[i]/d;
+    npvLe += leaseCF[i]/d;
+  }
+
+  const costLoan  = -npvL;   // flip: cost is positive
+  const costLease = -npvLe;
+  const savings   = costLoan - costLease;
+  const savingsPct = costLoan!==0 ? savings/costLoan : 0;
+  return { costLoan, costLease, savings, savingsPct };
+}
+
+document.getElementById('tvBtn').addEventListener('click', ()=>{
+  if(!lastModel){
+    alert('Please generate the comparison table first.');
+    return;
+  }
+  const tvResults = document.getElementById('tvResults');
+  // Toggle
+  if(tvResults.style.display !== 'none'){
+    tvResults.style.display='none';
+    document.getElementById('tvBtn').textContent='Calculate Time Value';
+    return;
+  }
+  // Pre-fill discount rate with loan ROI
+  const drInput = document.getElementById('discRate');
+  if(!drInput.value) drInput.value = lastModel.loanRoiPct.toFixed(2);
+  renderNPV();
+  tvResults.style.display='block';
+  document.getElementById('tvBtn').textContent='Hide Time Value';
+});
+
+document.getElementById('discRate')?.addEventListener('input', ()=>{
+  if(lastModel) renderNPV();
+});
+
+function renderNPV(){
+  const discRate = parseFloat(document.getElementById('discRate').value) || lastModel.loanRoiPct;
+  const npv = computeNPV(lastModel, discRate);
+  const savColor = npv.savings>=0 ? 'var(--green)' : 'var(--red)';
+  let h = `<table>
+    <thead><tr><th>Particulars</th><th>Loan</th><th>Lease</th></tr></thead>
+    <tbody>
+    <tr><td>NPV of Total Effective Cash Outflow</td><td>${inr(npv.costLoan)}</td><td>${inr(npv.costLease)}</td></tr>
+    <tr><td style="color:${savColor};font-weight:800;">NPV Savings via Lease</td>
+        <td colspan="2" style="color:${savColor};font-weight:800;">${inr(npv.savings)} (${(npv.savingsPct*100).toFixed(2)}%)</td></tr>
+    </tbody>
+  </table>`;
+  document.getElementById('tvOutput').innerHTML = h;
+}
+
 </script>
 </body>
 </html>
